@@ -1230,10 +1230,53 @@ def autoscale_region(region):
                     ###################################################################################
                     # IntegrationInstance
                     ###################################################################################
+                    # Execute Integration Message Pack Scale Up/Down operations for Oracle Integration
                     if resource.resource_type == "IntegrationInstance":
-                        if int(schedulehours[CurrentHour]) == 0 or int(schedulehours[CurrentHour]) == 1:
-                            resourceDetails = integration.get_integration_instance(integration_instance_id=resource.identifier).data
+                        resourceDetails = integration.get_integration_instance(integration_instance_id=resource.identifier).data
+                        if int(schedulehours[CurrentHour]) >= 0 and int(schedulehours[CurrentHour]) < 21:
+                            # Oracle Integration is running, and the message pack change is needed
+                            if resourceDetails.lifecycle_state == "ACTIVE" and int(schedulehours[CurrentHour]) > 0:
+                                if resourceDetails.message_packs > int(schedulehours[CurrentHour]):
+                                    if Action == "All" or Action == "Down":
+                                        MakeLog(" - Initiate Integration Message Pack Scale Down to {} for {}".format(int(schedulehours[CurrentHour]), resource.display_name))
+                                        integrationUpdate = oci.integration.models.UpdateIntegrationInstanceDetails()
+                                        integrationUpdate.message_packs = int(schedulehours[CurrentHour])
+                                        Retry = True
+                                        while Retry:
+                                            try:
+                                                response = integration.update_integration_instance(integration_instance_id=resource.identifier, update_integration_instance_details=integrationUpdate)
+                                                success.append(" - Initiate Integration Message Pack Scale Down from {} to {} for {}".format(resourceDetails.message_packs, int(schedulehours[CurrentHour]), resource.display_name))
+                                            except oci.exceptions.ServiceError as response:
+                                              if response.status == 429:
+                                                  MakeLog("Rate limit kicking in.. waiting {} seconds...".format(RateLimitDelay))
+                                                  time.sleep(RateLimitDelay)
+                                              else:
+                                                  ErrorsFound = True
+                                                  errors.append(" - Error ({}) Integration Message Pack Scale Down from {} to {} for {} - {}".format(response.status, resourceDetails.message_packs, int(schedulehours[CurrentHour]), resource.display_name))
+                                                  MakeLog(" - Error ({}) Integration Message Pack Scale Down from {} to {} for {} - {}".format(response.status, resourceDetails.message_packs, int(schedulehours[CurrentHour]), resource.display_name))
+                                                  Retry = False
 
+                                if resourceDetails.message_packs < int(schedulehours[CurrentHour]):
+                                    if Action == "All" or Action == "Up":
+                                        MakeLog(" - Initiate Integration Message Pack Scale Up to {} for {}".format(int(schedulehours[CurrentHour]), resource.display_name))
+                                        integrationUpdate = oci.integration.models.UpdateIntegrationInstanceDetails()
+                                        integrationUpdate.message_packs = int(schedulehours[CurrentHour])
+                                        Retry = True
+                                        while Retry:
+                                            try:
+                                                response = integration.update_integration_instance(integration_instance_id=resource.identifier, update_integration_instance_details=integrationUpdate)
+                                                success.append(" - Initiate Integration Message Pack Scale Up from {} to {} for {}".format(resourceDetails.message_packs, int(schedulehours[CurrentHour]), resource.display_name))
+                                            except oci.exceptions.ServiceError as response:
+                                              if response.status == 429:
+                                                  MakeLog("Rate limit kicking in.. waiting {} seconds...".format(RateLimitDelay))
+                                                  time.sleep(RateLimitDelay)
+                                              else:
+                                                  ErrorsFound = True
+                                                  errors.append(" - Error ({}) Integration Message Pack Scale Up from {} to {} for {} - {}".format(response.status, resourceDetails.message_packs, int(schedulehours[CurrentHour]), resource.display_name))
+                                                  MakeLog(" - Error ({}) Integration Message Pack Scale Up from {} to {} for {} - {}".format(response.status, resourceDetails.message_packs, int(schedulehours[CurrentHour]), resource.display_name))
+                                                  Retry = False
+
+                            # Oracle Integration is running, and the message pack change is needed
                             if resourceDetails.lifecycle_state == "ACTIVE" and int(schedulehours[CurrentHour]) == 0:
                                 if Action == "All" or Action == "Down":
                                     MakeLog(" - Initiate Integration Service shutdown for {}".format(resource.display_name))
@@ -1253,8 +1296,10 @@ def autoscale_region(region):
                                                 MakeLog(" - Error ({}) Integration Service Shutdown for {} - {}".format(response.status, resource.display_name, response.message))
                                                 Retry = False
 
-                            if resourceDetails.lifecycle_state == "INACTIVE" and int(schedulehours[CurrentHour]) == 1:
+                            if resourceDetails.lifecycle_state == "INACTIVE" and int(schedulehours[CurrentHour]) > 1:
                                 if Action == "All" or Action == "Up":
+                                    # Oracle Integration is stopped and needs to be started with same amount of Message Packs configured
+                                    if resourceDetails.message_packs == int(schedulehours[CurrentHour]):
                                     MakeLog(" - Initiate Integration Service startup for {}".format(resource.display_name))
                                     Retry = True
                                     while Retry:
@@ -1271,6 +1316,13 @@ def autoscale_region(region):
                                                 errors.append(" - Error ({}) Integration Service startup for {} - {}".format(response.message, resource.display_name, response.message))
                                                 MakeLog(" - Error ({}) Integration Service startup for {} - {}".format(response.message, resource.display_name, response.message))
                                                 Retry = False
+
+                                    # Oracle Integration is stopped and needs to be started, after that it required Message Pack change
+                                    if resourceDetails.message_packs != int(schedulehours[CurrentHour]):
+                                        tcount = tcount + 1
+                                        thread = AutonomousThread(tcount, resource.identifier, resource.display_name, int(schedulehours[CurrentHour]))
+                                        thread.start()
+                                        threads.append(thread)                                      
 
                     ###################################################################################
                     # LoadBalancer
@@ -1683,7 +1735,6 @@ if cmd.log:
     putlogdetails.log_entry_batches = [logdetails]
 
     result = logingest.put_logs(log_id=cmd.log, put_logs_details=putlogdetails)
-
 
 
 
