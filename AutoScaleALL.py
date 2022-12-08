@@ -26,6 +26,7 @@
 #
 #################################################################################################################
 import oci
+import logging
 import datetime
 import calendar
 import threading
@@ -35,6 +36,8 @@ import argparse
 import os
 import Regions
 import OCIFunctions
+
+logging.getLogger('oci').setLevel(logging.DEBUG)
 
 logdetails = oci.loggingingestion.models.LogEntryBatch()
 logdetails.entries = []
@@ -1244,7 +1247,11 @@ def autoscale_region(region):
                                         Retry = True
                                         while Retry:
                                             try:
-                                                response = integration.update_integration_instance(integration_instance_id=resource.identifier, update_integration_instance_details=integrationUpdate)
+                                                response = integration.update_integration_instance(
+                                                    integration_instance_id=resource.identifier,
+                                                    update_integration_instance_details=integrationUpdate)
+
+                                                # response = integration.update_integration_instance(integration_instance_id=resource.identifier, update_integration_instance_details=integrationUpdate)
                                                 success.append(" - Initiate Integration Message Pack Scale Down from {} to {} for {}".format(resourceDetails.message_packs, int(schedulehours[CurrentHour]), resource.display_name))
                                             except oci.exceptions.ServiceError as response:
                                               if response.status == 429:
@@ -1300,22 +1307,22 @@ def autoscale_region(region):
                                 if Action == "All" or Action == "Up":
                                     # Oracle Integration is stopped and needs to be started with same amount of Message Packs configured
                                     if resourceDetails.message_packs == int(schedulehours[CurrentHour]):
-                                    MakeLog(" - Initiate Integration Service startup for {}".format(resource.display_name))
-                                    Retry = True
-                                    while Retry:
-                                        try:
-                                            response = integration.start_integration_instance(integration_instance_id=resource.identifier)
-                                            Retry = False
-                                            success.append(" - Initiate Integration Service startup for {}".format(resource.display_name))
-                                        except oci.exceptions.ServiceError as response:
-                                            if response.status == 429:
-                                                MakeLog("Rate limit kicking in.. waiting {} seconds...".format(RateLimitDelay))
-                                                time.sleep(RateLimitDelay)
-                                            else:
-                                                ErrorsFound = True
-                                                errors.append(" - Error ({}) Integration Service startup for {} - {}".format(response.message, resource.display_name, response.message))
-                                                MakeLog(" - Error ({}) Integration Service startup for {} - {}".format(response.message, resource.display_name, response.message))
+                                        MakeLog(" - Initiate Integration Service startup for {}".format(resource.display_name))
+                                        Retry = True
+                                        while Retry:
+                                            try:
+                                                response = integration.start_integration_instance(integration_instance_id=resource.identifier)
                                                 Retry = False
+                                                success.append(" - Initiate Integration Service startup for {}".format(resource.display_name))
+                                            except oci.exceptions.ServiceError as response:
+                                                if response.status == 429:
+                                                    MakeLog("Rate limit kicking in.. waiting {} seconds...".format(RateLimitDelay))
+                                                    time.sleep(RateLimitDelay)
+                                                else:
+                                                    ErrorsFound = True
+                                                    errors.append(" - Error ({}) Integration Service startup for {} - {}".format(response.message, resource.display_name, response.message))
+                                                    MakeLog(" - Error ({}) Integration Service startup for {} - {}".format(response.message, resource.display_name, response.message))
+                                                    Retry = False
 
                                     # Oracle Integration is stopped and needs to be started, after that it required Message Pack change
                                     if resourceDetails.message_packs != int(schedulehours[CurrentHour]):
