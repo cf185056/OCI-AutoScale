@@ -422,7 +422,6 @@ def autoscale_region(region):
                                                           **{
                                                               "limit": 1000
                                                           }).data
-
     except oci.exceptions.ServiceError as response:
         print ("Error: {} - {}".format(response.code, response.message))
         result = oci.resource_search.models.ResourceSummaryCollection()
@@ -473,7 +472,12 @@ def autoscale_region(region):
                 summary.lifecycle_state = mysql_instance.lifecycle_state
                 summary.display_name = mysql_instance.display_name
                 summary.resource_type = "MysqlDBInstance"
-                result.items.append(summary)
+
+                try:
+                   result.items.append(summary)
+                except AttributeError:
+                   result.append(summary)
+                
 
         MakeLog("")
 
@@ -491,9 +495,9 @@ def autoscale_region(region):
         # The search data is not always updated. Get the tags from the actual resource itself, not using the search data.
         resourceOk = False
         if cmd.print_ocid:
-            MakeLog("Checking {} ({}) - {}...".format(resource.display_name, resource.resource_type, resource.identifier))
+            MakeLog("Checking {} ({}) - {}, CurrentState: {}...".format(resource.display_name, resource.resource_type, resource.identifier, resource.lifecycle_state))
         else:
-            MakeLog("Checking {} ({})...".format(resource.display_name, resource.resource_type))
+            MakeLog("Checking {} ({}) CurentState: {}...".format(resource.display_name, resource.resource_type, resource.lifecycle_state))
 
         try:
             if resource.resource_type == "Instance":
